@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Ball Simulation</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.9.0/p5.min.js"></script>
+  </head>
+  <body>
+    <script>
+      // State variables
+let currentState = 'menu'; 
+let btnClassical, btnQuantum, btnBack;
+
+// Atom Controls
+let protonSlider; 
+let btnAddElectron, btnSubElectron, btnResetElectron;
+let numElectrons = 1; 
+
+// --- Periodic Table Lookups ---
+let elementCoords; 
+
+const elements = [
+  "", "Hydrogen", "Helium", "Lithium", "Beryllium", "Boron", "Carbon", "Nitrogen", "Oxygen", "Fluorine", "Neon", 
+  "Sodium", "Magnesium", "Aluminum", "Silicon", "Phosphorus", "Sulfur", "Chlorine", "Argon", "Potassium", "Calcium", 
+  "Scandium", "Titanium", "Vanadium", "Chromium", "Manganese", "Iron", "Cobalt", "Nickel", "Copper", "Zinc", "Gallium", 
+  "Germanium", "Arsenic", "Selenium", "Bromine", "Krypton", "Rubidium", "Strontium", "Yttrium", "Zirconium", "Niobium", 
+  "Molybdenum", "Technetium", "Ruthenium", "Rhodium", "Palladium", "Silver", "Cadmium", "Indium", "Tin", "Antimony", 
+  "Tellurium", "Iodine", "Xenon", "Cesium", "Barium", "Lanthanum", "Cerium", "Praseodymium", "Neodymium", "Promethium", 
+  "Samarium", "Europium", "Gadolinium", "Terbium", "Dysprosium", "Holmium", "Erbium", "Thulium", "Ytterbium", "Lutetium", 
+  "Hafnium", "Tantalum", "Tungsten", "Rhenium", "Osmium", "Iridium", "Platinum", "Gold", "Mercury", "Thallium", "Lead", 
+  "Bismuth", "Polonium", "Astatine", "Radon", "Francium", "Radium", "Actinium", "Thorium", "Protactinium", "Uranium", 
+  "Neptunium", "Plutonium", "Americium", "Curium", "Berkelium", "Californium", "Einsteinium", "Fermium", "Mendelevium", 
+  "Nobelium", "Lawrencium", "Rutherfordium", "Dubnium", "Seaborgium", "Bohrium", "Hassium", "Meitnerium", "Darmstadtium", 
+  "Roentgenium", "Copernicium", "Nihonium", "Flerovium", "Moscovium", "Livermorium", "Tennessine", "Oganesson"
+];
+
+// Visual Display Variables
+const visualBaseRadius = 60; 
+const visualRadiusStep = 45; 
+const shellCapacities = [2, 8, 18, 32, 50, 72]; 
+let shellAngles = [0, 0, 0, 0, 0, 0]; 
+
+function setup() {
+  createCanvas(800, 600);
+  
+  populateElementCoords(); 
+
+  // Navigation Buttons
+  btnClassical = createButton('Classical Interpretation');
+  btnClassical.position(width / 2 - 180, height / 2 + 40);
+  btnClassical.size(150, 40);
+  btnClassical.style('border-radius', '6px'); // Rounded corners
+  btnClassical.mousePressed(() => switchPage('classical'));
+  
+  btnQuantum = createButton('Quantum Interpretation');
+  btnQuantum.position(width / 2 + 30, height / 2 + 40);
+  btnQuantum.size(150, 40);
+  btnQuantum.style('border-radius', '6px'); 
+  btnQuantum.mousePressed(() => switchPage('quantum'));
+  
+  btnBack = createButton('Back to Grid');
+  btnBack.position(20, 20);
+  btnBack.style('border-radius', '6px'); 
+  btnBack.mousePressed(() => switchPage('menu'));
+  btnBack.hide(); 
+  
+  // Proton Slider
+  protonSlider = createSlider(1, 118, 1);
+  protonSlider.position(width / 2 - 200, height - 40);
+  protonSlider.style('width', '400px');
+  protonSlider.hide();
+  
+  let tickmarks = createElement('datalist');
+  tickmarks.id('protonTicks');
+  for (let i = 1; i <= 118; i++) {
+    let opt = createElement('option');
+    opt.value(i);
+    opt.parent(tickmarks);
+  }
+  protonSlider.attribute('list', 'protonTicks');
+  
+  // Electron Buttons (Shifted up slightly to fit reset button)
+  btnAddElectron = createButton('+ Add Electron');
+  btnAddElectron.position(20, height - 140);
+  btnAddElectron.size(150, 30); 
+  btnAddElectron.style('border-radius', '6px');
+  btnAddElectron.mousePressed(() => numElectrons++);
+  btnAddElectron.hide();
+  
+  btnSubElectron = createButton('- Remove Electron');
+  btnSubElectron.position(20, height - 100);
+  btnSubElectron.size(150, 30); 
+  btnSubElectron.style('border-radius', '6px');
+  btnSubElectron.mousePressed(() => {
+    if (numElectrons > 0) numElectrons--;
+  });
+  btnSubElectron.hide();
+  
+  // NEW: Reset Electrons Button
+  btnResetElectron = createButton('Reset Electrons');
+  btnResetElectron.position(20, height - 60);
+  btnResetElectron.size(150, 30); 
+  btnResetElectron.style('border-radius', '6px');
+  btnResetElectron.mousePressed(() => numElectrons = 1);
+  btnResetElectron.hide();
+}
+
+function draw() {
+  background(15, 15, 20); 
+  
+  if (currentState === 'menu') {
+    drawMenu();
+  } else if (currentState === 'classical') {
+    drawClassical();
+  } else if (currentState === 'quantum') {
+    drawQuantum();
+  }
+}
+
+function switchPage(page) {
+  currentState = page;
+  
+  if (page === 'menu') {
+    btnClassical.show();
+    btnQuantum.show();
+    btnBack.hide();
+    protonSlider.hide();
+    btnAddElectron.hide();
+    btnSubElectron.hide();
+    btnResetElectron.hide();
+  } else if (page === 'classical') {
+    btnClassical.hide();
+    btnQuantum.hide();
+    btnBack.show();
+    protonSlider.show();
+    btnAddElectron.show();
+    btnSubElectron.show();
+    btnResetElectron.show();
+  } else if (page === 'quantum') {
+    btnClassical.hide();
+    btnQuantum.hide();
+    btnBack.show();
+    protonSlider.hide();
+    btnAddElectron.hide();
+    btnSubElectron.hide();
+    btnResetElectron.hide();
+  }
+}
+
+function populateElementCoords() {
+  elementCoords = new Array(119); 
+  
+  for (let z = 1; z <= 118; z++) {
+    let r, c; 
+    
+    if (z === 1) { r = 1; c = 1; } 
+    else if (z === 2) { r = 1; c = 18; } 
+    else if (z >= 3 && z <= 10) { 
+      r = 2; c = (z <= 4) ? (z - 2) : (z + 8); 
+    }
+    else if (z >= 11 && z <= 18) { 
+      r = 3; c = (z <= 12) ? (z - 10) : (z); 
+    }
+    else if (z >= 19 && z <= 56) { 
+      r = floor((z - 19) / 18) + 4; 
+      c = ((z - 19) % 18) + 1;
+    }
+    else if (z >= 57 && z <= 71) { 
+      r = 9; c = z - 53; 
+    }
+    else if (z >= 72 && z <= 86) { 
+      r = 6; c = z - 68;
+    }
+    else if (z >= 87 && z <= 88) { 
+      r = 7; c = z - 86;
+    }
+    else if (z >= 89 && z <= 103) { 
+      r = 10; c = z - 85; 
+    }
+    else if (z >= 104 && z <= 118) { 
+      r = 7; c = z - 100;
+    }
+    elementCoords[z] = {row: r, col: c};
+  }
+}
+
+function drawMenu() {
+  fill(255);
+  noStroke();
+  textAlign(CENTER, CENTER);
+  textSize(32);
+  text("Atom Simulator", width / 2, height / 2 - 40);
+  
+  stroke(100, 150, 255, 150);
+  strokeWeight(3);
+  
+  let cols = 20;
+  let rows = 15;
+  let paddingX = width / cols;
+  let paddingY = height / rows;
+  
+  for (let i = 0; i < cols; i++) {
+    for (let j = 0; j < rows; j++) {
+      let x = i * paddingX + paddingX / 2;
+      let y = j * paddingY + paddingY / 2;
+      point(x, y);
+    }
+  }
+}
+
+function drawClassical() {
+  let Z = protonSlider.value(); 
+  
+  let shellCounts = [];
+  let remainingElectrons = numElectrons;
+  let currentShellIndex = 0;
+  
+  while (remainingElectrons > 0 && currentShellIndex < shellCapacities.length) {
+    let capacity = shellCapacities[currentShellIndex];
+    if (remainingElectrons > capacity) {
+      shellCounts.push(capacity);
+      remainingElectrons -= capacity;
+    } else {
+      shellCounts.push(remainingElectrons);
+      remainingElectrons = 0;
+    }
+    currentShellIndex++;
+  }
+
+  let netCharge = abs(Z - numElectrons);
+  let instability = map(netCharge, 0, 6, 0, 1, true); 
+  
+  if (shellCounts.length > 0 && netCharge === 0) {
+    let lastShellCount = shellCounts[shellCounts.length - 1];
+    let lastShellCap = shellCapacities[shellCounts.length - 1];
+    let isOctet = (lastShellCount === 8 && shellCounts.length > 1); 
+    let isFull = (lastShellCount === lastShellCap); 
+    
+    if (!isFull && !isOctet) {
+      instability = max(instability, 0.15); 
+    }
+  }
+
+  fill(255);
+  noStroke();
+  
+  textAlign(CENTER, CENTER);
+  textSize(24);
+  text("Classical Interpretation (Bohr Model)", width / 2, 40);
+  
+  // Shifted up to clear the new Reset Button
+  textAlign(LEFT, CENTER);
+  textSize(16);
+  fill(255);
+  text(`Total Electrons: ${numElectrons}`, 20, height - 165); 
+  
+  let chargeDifference = Z - numElectrons;
+  let ionText = chargeDifference === 0 ? "Neutral" : (chargeDifference > 0 ? `+${chargeDifference} Ion` : `${abs(chargeDifference)}- Ion`);
+  
+  textAlign(CENTER, CENTER);
+  textSize(16);
+  text(`Protons (Z): ${Z}  [${ionText}]`, width / 2, height - 60);
+
+  textAlign(RIGHT, TOP);
+  textSize(16);
+  fill(100, 255, 100); 
+  text("Real-World Bohr Values:", width - 30, 80);
+  
+  for (let i = 0; i < shellCounts.length; i++) {
+    let n = i + 1;
+    let realVelocity = 2187 * (Z / n); 
+    let realRadius = 52.9 * ((n * n) / Z); 
+    
+    textSize(13);
+    text(`n=${n} | v: ${realVelocity.toFixed(0)} km/s | r: ${realRadius.toFixed(1)} pm`, width - 30, 80 + n * 22);
+  }
+
+  drawMiniTable(Z); 
+  
+  textAlign(RIGHT, BOTTOM);
+  textSize(32);
+  fill(255, 200, 100); 
+  text(elements[Z], width - 30, height - 30);
+  
+  textSize(16);
+  fill(200);
+  text(`Atomic Number: ${Z}`, width - 30, height - 70);
+
+  let barX = 30;
+  let barY = 140;
+  let barW = 20;
+  let barH = 200;
+  
+  textAlign(CENTER, BOTTOM);
+  textSize(14);
+  fill(255);
+  text("Instability", barX + barW / 2, barY - 10);
+  
+  textSize(10);
+  fill(255, 100, 100);
+  text("Extreme", barX + barW / 2, barY - 25);
+  fill(100, 255, 100);
+  text("Stable", barX + barW / 2, barY + barH + 15);
+
+  noFill();
+  stroke(255, 100);
+  strokeWeight(1);
+  rect(barX, barY, barW, barH);
+  
+  let visualInstability = map(instability, 0, 1, 0.05, 1, true); 
+  let fillH = visualInstability * barH;
+  let barColor = lerpColor(color(50, 255, 50), color(255, 50, 50), instability);
+  
+  fill(barColor);
+  noStroke();
+  rect(barX, barY + barH - fillH, barW, fillH);
+
+  push(); 
+  translate(width / 2, height / 2 - 30); 
+  
+  let visualNucleusRadius = map(Z, 1, 118, 10, 40);
+  fill(255, 100, 100);
+  noStroke();
+  circle(0, 0, visualNucleusRadius); 
+  
+  for (let i = 0; i < shellCounts.length; i++) {
+    let n = i + 1; 
+    let visualR = visualBaseRadius + (i * visualRadiusStep); 
+    let eCount = shellCounts[i]; 
+    
+    let visualAngularVelocity = (0.05 * Z) / (n * n); 
+    
+    noFill();
+    stroke(255, 50);
+    strokeWeight(1);
+    circle(0, 0, visualR * 2);
+    
+    for (let j = 0; j < eCount; j++) {
+      let angleOffset = (TWO_PI / eCount) * j;
+      let currentAngle = shellAngles[i] + angleOffset;
+      
+      let x = visualR * cos(currentAngle);
+      let y = visualR * sin(currentAngle);
+      
+      fill(100, 200, 255);
+      noStroke();
+      circle(x, y, 8); 
+    }
+    
+    shellAngles[i] += visualAngularVelocity;
+  }
+  pop(); 
+}
+
+function drawMiniTable(currentZ) {
+  // Using your updated positioning and sizes
+  let tableX = width - 185;
+  let tableY = height - 200; 
+  let standardSize = 8; 
+  let gap = 1; 
+  let highlightExpand = 4; 
+  
+  rectMode(CENTER);
+  
+  for (let z = 1; z <= 118; z++) {
+    let pos = elementCoords[z];
+    if (!pos) continue; 
+    
+    let drawX = tableX + (pos.col - 1) * (standardSize + gap);
+    let drawY = tableY + (pos.row - 1) * (standardSize + gap);
+    
+    if (z === currentZ) {
+      stroke(255);
+      strokeWeight(1);
+      fill(255, 200, 100); 
+      rect(drawX, drawY, standardSize + highlightExpand, standardSize + highlightExpand, 1);
+    } else {
+      noStroke();
+      fill(100, 150);
+      rect(drawX, drawY, standardSize, standardSize);
+    }
+  }
+  
+  rectMode(CORNER); 
+}
+
+function drawQuantum() {
+  fill(255);
+  noStroke();
+  textAlign(CENTER, CENTER);
+  textSize(24);
+  text("Quantum Interpretation (Schrödinger Model)", width / 2, 40);
+  
+  textSize(16);
+  fill(150);
+  text("Blank canvas ready for probability clouds...", width / 2, height / 2);
+}
+    </script>
+  </body>
+</html>
