@@ -6,7 +6,7 @@
   </head>
   <body>
     <script>
-      // State variables
+// State variables
 let currentState = 'menu'; 
 let btnClassical, btnQuantum, btnBack;
 
@@ -40,32 +40,28 @@ const shellCapacities = [2, 8, 18, 32, 50, 72];
 let shellAngles = [0, 0, 0, 0, 0, 0]; 
 
 function setup() {
-  createCanvas(800, 600);
+  // Use full window size
+  createCanvas(windowWidth, windowHeight);
   
   populateElementCoords(); 
 
-  // Navigation Buttons
+  // Create UI Elements (Positioning is handled in updateUIPositions)
   btnClassical = createButton('Classical Interpretation');
-  btnClassical.position(width / 2 - 180, height / 2 + 40);
   btnClassical.size(150, 40);
-  btnClassical.style('border-radius', '6px'); // Rounded corners
+  btnClassical.style('border-radius', '6px'); 
   btnClassical.mousePressed(() => switchPage('classical'));
   
   btnQuantum = createButton('Quantum Interpretation');
-  btnQuantum.position(width / 2 + 30, height / 2 + 40);
   btnQuantum.size(150, 40);
   btnQuantum.style('border-radius', '6px'); 
   btnQuantum.mousePressed(() => switchPage('quantum'));
   
   btnBack = createButton('Back to Grid');
-  btnBack.position(20, 20);
   btnBack.style('border-radius', '6px'); 
   btnBack.mousePressed(() => switchPage('menu'));
   btnBack.hide(); 
   
-  // Proton Slider
   protonSlider = createSlider(1, 118, 1);
-  protonSlider.position(width / 2 - 200, height - 40);
   protonSlider.style('width', '400px');
   protonSlider.hide();
   
@@ -78,16 +74,13 @@ function setup() {
   }
   protonSlider.attribute('list', 'protonTicks');
   
-  // Electron Buttons (Shifted up slightly to fit reset button)
   btnAddElectron = createButton('+ Add Electron');
-  btnAddElectron.position(20, height - 140);
   btnAddElectron.size(150, 30); 
   btnAddElectron.style('border-radius', '6px');
   btnAddElectron.mousePressed(() => numElectrons++);
   btnAddElectron.hide();
   
   btnSubElectron = createButton('- Remove Electron');
-  btnSubElectron.position(20, height - 100);
   btnSubElectron.size(150, 30); 
   btnSubElectron.style('border-radius', '6px');
   btnSubElectron.mousePressed(() => {
@@ -95,13 +88,14 @@ function setup() {
   });
   btnSubElectron.hide();
   
-  // NEW: Reset Electrons Button
   btnResetElectron = createButton('Reset Electrons');
-  btnResetElectron.position(20, height - 60);
   btnResetElectron.size(150, 30); 
   btnResetElectron.style('border-radius', '6px');
   btnResetElectron.mousePressed(() => numElectrons = 1);
   btnResetElectron.hide();
+
+  // Apply initial positions
+  updateUIPositions();
 }
 
 function draw() {
@@ -114,6 +108,23 @@ function draw() {
   } else if (currentState === 'quantum') {
     drawQuantum();
   }
+}
+
+// Automatically called by p5.js when the browser is resized
+function windowResized() {
+  resizeCanvas(windowWidth, windowHeight);
+  updateUIPositions();
+}
+
+// Helper to keep DOM elements anchored correctly
+function updateUIPositions() {
+  btnClassical.position(width / 2 - 180, height / 2 + 40);
+  btnQuantum.position(width / 2 + 30, height / 2 + 40);
+  btnBack.position(20, 20);
+  protonSlider.position(width / 2 - 200, height - 40);
+  btnAddElectron.position(20, height - 140);
+  btnSubElectron.position(20, height - 100);
+  btnResetElectron.position(20, height - 60);
 }
 
 function switchPage(page) {
@@ -247,7 +258,6 @@ function drawClassical() {
   textSize(24);
   text("Classical Interpretation (Bohr Model)", width / 2, 40);
   
-  // Shifted up to clear the new Reset Button
   textAlign(LEFT, CENTER);
   textSize(16);
   fill(255);
@@ -352,7 +362,6 @@ function drawClassical() {
 }
 
 function drawMiniTable(currentZ) {
-  // Using your updated positioning and sizes
   let tableX = width - 185;
   let tableY = height - 200; 
   let standardSize = 8; 
