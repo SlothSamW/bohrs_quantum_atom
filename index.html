@@ -10,10 +10,49 @@
 let currentState = 'menu'; 
 let btnClassical, btnQuantum, btnBack;
 
-// Atom Controls
+// Atom Controls (Classical)
 let protonSlider; 
 let btnAddElectron, btnSubElectron, btnResetElectron;
+let btnShineLight;
+let isShiningLight = false;
 let numElectrons = 1; 
+
+// Light Source Controls
+let btnLightIR, btnLightVisLow, btnLightVisHigh, btnLightUV, btnLightWhite;
+let activeLights = { IR: false, VisLow: false, VisHigh: false, UV: false };
+
+// Ionization Controls & State
+let btnToggleIonization;
+let isIonizationEnabled = false;
+let ionizationMessageTimer = 0;
+let ionizedClassicalCount = 0;
+let quantumIsIonized = false;
+
+// Photon & Excitation State (Shared)
+let incomingPhotons = [];
+let emittedPhotons = [];
+let excitedElectrons = []; 
+
+// Quantum State
+let quantumN = 1;
+let quantumDecayTimer = 0;
+let quantumAbsorbedPhoton = null;
+
+// Visible light colors sorted by energy
+const visLowColors = [
+  [255, 50, 50],   // Red
+  [255, 165, 0],   // Orange
+  [255, 255, 50]   // Yellow
+];
+
+const visHighColors = [
+  [50, 255, 50],   // Green
+  [50, 150, 255],  // Blue
+  [150, 50, 255]   // Violet
+];
+
+// Atom Controls (Quantum)
+let quantumNSlider;
 
 // --- Periodic Table Lookups ---
 let elementCoords; 
@@ -40,12 +79,10 @@ const shellCapacities = [2, 8, 18, 32, 50, 72];
 let shellAngles = [0, 0, 0, 0, 0, 0]; 
 
 function setup() {
-  // Use full window size
   createCanvas(windowWidth, windowHeight);
-  
   populateElementCoords(); 
 
-  // Create UI Elements (Positioning is handled in updateUIPositions)
+  // Navigation Buttons
   btnClassical = createButton('Classical Interpretation');
   btnClassical.size(150, 40);
   btnClassical.style('border-radius', '6px'); 
@@ -61,6 +98,7 @@ function setup() {
   btnBack.mousePressed(() => switchPage('menu'));
   btnBack.hide(); 
   
+  // --- Classical UI ---
   protonSlider = createSlider(1, 118, 1);
   protonSlider.style('width', '400px');
   protonSlider.hide();
@@ -91,10 +129,80 @@ function setup() {
   btnResetElectron = createButton('Reset Electrons');
   btnResetElectron.size(150, 30); 
   btnResetElectron.style('border-radius', '6px');
-  btnResetElectron.mousePressed(() => numElectrons = 1);
+  btnResetElectron.mousePressed(() => {
+    numElectrons = 1;
+    excitedElectrons = []; 
+  });
   btnResetElectron.hide();
 
-  // Apply initial positions
+  // --- Light Source Toggle Buttons ---
+  btnLightIR = createButton('Infrared (~1.2 eV)');
+  btnLightIR.size(150, 30);
+  btnLightIR.style('border-radius', '6px');
+  btnLightIR.mousePressed(() => { activeLights.IR = !activeLights.IR; syncLightButtons(); });
+  btnLightIR.hide();
+
+  btnLightVisLow = createButton('Red/Yellow (~2.0 eV)');
+  btnLightVisLow.size(150, 30);
+  btnLightVisLow.style('border-radius', '6px');
+  btnLightVisLow.mousePressed(() => { activeLights.VisLow = !activeLights.VisLow; syncLightButtons(); });
+  btnLightVisLow.hide();
+
+  btnLightVisHigh = createButton('Blue/Violet (~2.8 eV)');
+  btnLightVisHigh.size(150, 30);
+  btnLightVisHigh.style('border-radius', '6px');
+  btnLightVisHigh.mousePressed(() => { activeLights.VisHigh = !activeLights.VisHigh; syncLightButtons(); });
+  btnLightVisHigh.hide();
+
+  btnLightUV = createButton('Ultraviolet (>3.2 eV)');
+  btnLightUV.size(150, 30);
+  btnLightUV.style('border-radius', '6px');
+  btnLightUV.mousePressed(() => { activeLights.UV = !activeLights.UV; syncLightButtons(); });
+  btnLightUV.hide();
+
+  btnLightWhite = createButton('White Light (All)');
+  btnLightWhite.size(150, 30);
+  btnLightWhite.style('border-radius', '6px');
+  btnLightWhite.mousePressed(() => { 
+    let allOn = activeLights.IR && activeLights.VisLow && activeLights.VisHigh && activeLights.UV;
+    activeLights.IR = !allOn;
+    activeLights.VisLow = !allOn;
+    activeLights.VisHigh = !allOn;
+    activeLights.UV = !allOn;
+    syncLightButtons(); 
+  });
+  btnLightWhite.hide();
+
+  // Master switch
+  btnShineLight = createButton('▶ Shine Light');
+  btnShineLight.size(150, 40);
+  btnShineLight.style('border-radius', '6px');
+  btnShineLight.style('font-weight', 'bold');
+  btnShineLight.mousePressed(() => {
+    isShiningLight = !isShiningLight;
+    btnShineLight.html(isShiningLight ? '■ Stop Light' : '▶ Shine Light');
+    syncLightButtons();
+  });
+  btnShineLight.hide();
+
+  // Ionization Toggle
+  btnToggleIonization = createButton('Ionization: OFF');
+  btnToggleIonization.size(150, 30);
+  btnToggleIonization.style('border-radius', '6px');
+  btnToggleIonization.mousePressed(() => {
+    isIonizationEnabled = !isIonizationEnabled;
+    syncLightButtons();
+  });
+  btnToggleIonization.hide();
+
+  // Initialize styles
+  syncLightButtons();
+
+  // --- Quantum UI ---
+  quantumNSlider = createSlider(1, 10, 1); 
+  quantumNSlider.style('width', '400px');
+  quantumNSlider.hide();
+
   updateUIPositions();
 }
 
@@ -108,300 +216,611 @@ function draw() {
   } else if (currentState === 'quantum') {
     drawQuantum();
   }
+
+  if (ionizationMessageTimer > 0) {
+    drawIonizationPopup();
+    ionizationMessageTimer--;
+    
+    if (ionizationMessageTimer === 0) {
+      if (currentState === 'classical') {
+        numElectrons += ionizedClassicalCount;
+        ionizedClassicalCount = 0;
+      } else if (currentState === 'quantum') {
+        quantumIsIonized = false;
+      }
+    }
+  }
+
+  push();
+  fill(255, 100); 
+  noStroke();
+  textAlign(RIGHT, TOP);
+  textSize(12);
+  text("4.11.14:00", width - 15, 15);
+  pop();
 }
 
-// Automatically called by p5.js when the browser is resized
 function windowResized() {
   resizeCanvas(windowWidth, windowHeight);
   updateUIPositions();
 }
 
-// Helper to keep DOM elements anchored correctly
 function updateUIPositions() {
   btnClassical.position(width / 2 - 180, height / 2 + 40);
   btnQuantum.position(width / 2 + 30, height / 2 + 40);
   btnBack.position(20, 20);
+  
   protonSlider.position(width / 2 - 200, height - 40);
-  btnAddElectron.position(20, height - 140);
-  btnSubElectron.position(20, height - 100);
-  btnResetElectron.position(20, height - 60);
+  
+  btnLightIR.position(35, 160);
+  btnLightVisLow.position(35, 200);
+  btnLightVisHigh.position(35, 240);
+  btnLightUV.position(35, 280);
+  btnLightWhite.position(35, 330);
+  
+  btnShineLight.position(35, 400);
+
+  btnAddElectron.position(20, height - 190);
+  btnSubElectron.position(20, height - 150);
+  btnResetElectron.position(20, height - 110);
+  
+  btnToggleIonization.position(20, height - 60);
+
+  quantumNSlider.position(width / 2 - 200, height - 40);
+}
+
+function syncLightButtons() {
+  const activeStyle = (btn, bgHex, textHex) => {
+    btn.style('background-color', bgHex);
+    btn.style('color', textHex);
+    btn.style('border', `1px solid ${textHex}`);
+  };
+  const inactiveStyle = (btn) => {
+    btn.style('background-color', '#222');
+    btn.style('color', '#aaa');
+    btn.style('border', '1px solid #555');
+  };
+
+  if (activeLights.IR) activeStyle(btnLightIR, '#5a1c1c', '#ffaaaa');
+  else inactiveStyle(btnLightIR);
+
+  if (activeLights.VisLow) activeStyle(btnLightVisLow, '#6e4c13', '#ffdca8');
+  else inactiveStyle(btnLightVisLow);
+
+  if (activeLights.VisHigh) activeStyle(btnLightVisHigh, '#183866', '#a8ccff');
+  else inactiveStyle(btnLightVisHigh);
+
+  if (activeLights.UV) activeStyle(btnLightUV, '#4a1e6e', '#dca8ff');
+  else inactiveStyle(btnLightUV);
+
+  let allOn = activeLights.IR && activeLights.VisLow && activeLights.VisHigh && activeLights.UV;
+  if (allOn) activeStyle(btnLightWhite, '#dddddd', '#111111');
+  else inactiveStyle(btnLightWhite);
+
+  if (isShiningLight) activeStyle(btnShineLight, '#ffffff', '#000000');
+  else inactiveStyle(btnShineLight);
+
+  if (isIonizationEnabled) {
+    btnToggleIonization.html('Ionization: ON');
+    activeStyle(btnToggleIonization, '#5a1c1c', '#ffaaaa');
+  } else {
+    btnToggleIonization.html('Ionization: OFF');
+    inactiveStyle(btnToggleIonization);
+  }
 }
 
 function switchPage(page) {
   currentState = page;
   
+  btnClassical.hide(); btnQuantum.hide(); btnBack.hide();
+  protonSlider.hide(); btnAddElectron.hide(); btnSubElectron.hide();
+  btnResetElectron.hide(); btnShineLight.hide(); quantumNSlider.hide();
+  btnToggleIonization.hide();
+  
+  btnLightIR.hide(); btnLightVisLow.hide(); btnLightVisHigh.hide(); 
+  btnLightUV.hide(); btnLightWhite.hide();
+
   if (page === 'menu') {
-    btnClassical.show();
-    btnQuantum.show();
-    btnBack.hide();
-    protonSlider.hide();
-    btnAddElectron.hide();
-    btnSubElectron.hide();
-    btnResetElectron.hide();
+    btnClassical.show(); btnQuantum.show();
   } else if (page === 'classical') {
-    btnClassical.hide();
-    btnQuantum.hide();
-    btnBack.show();
-    protonSlider.show();
-    btnAddElectron.show();
-    btnSubElectron.show();
-    btnResetElectron.show();
+    btnBack.show(); protonSlider.show(); btnAddElectron.show();
+    btnSubElectron.show(); btnResetElectron.show(); btnShineLight.show();
+    btnToggleIonization.show();
+    
+    btnLightIR.show(); btnLightVisLow.show(); btnLightVisHigh.show(); 
+    btnLightUV.show(); btnLightWhite.show();
   } else if (page === 'quantum') {
-    btnClassical.hide();
-    btnQuantum.hide();
-    btnBack.show();
-    protonSlider.hide();
-    btnAddElectron.hide();
-    btnSubElectron.hide();
-    btnResetElectron.hide();
+    btnBack.show(); quantumNSlider.show(); btnShineLight.show();
+    btnToggleIonization.show();
+    
+    btnLightIR.show(); btnLightVisLow.show(); btnLightVisHigh.show(); 
+    btnLightUV.show(); btnLightWhite.show();
   }
 }
 
 function populateElementCoords() {
   elementCoords = new Array(119); 
-  
   for (let z = 1; z <= 118; z++) {
     let r, c; 
-    
     if (z === 1) { r = 1; c = 1; } 
     else if (z === 2) { r = 1; c = 18; } 
-    else if (z >= 3 && z <= 10) { 
-      r = 2; c = (z <= 4) ? (z - 2) : (z + 8); 
-    }
-    else if (z >= 11 && z <= 18) { 
-      r = 3; c = (z <= 12) ? (z - 10) : (z); 
-    }
-    else if (z >= 19 && z <= 56) { 
-      r = floor((z - 19) / 18) + 4; 
-      c = ((z - 19) % 18) + 1;
-    }
-    else if (z >= 57 && z <= 71) { 
-      r = 9; c = z - 53; 
-    }
-    else if (z >= 72 && z <= 86) { 
-      r = 6; c = z - 68;
-    }
-    else if (z >= 87 && z <= 88) { 
-      r = 7; c = z - 86;
-    }
-    else if (z >= 89 && z <= 103) { 
-      r = 10; c = z - 85; 
-    }
-    else if (z >= 104 && z <= 118) { 
-      r = 7; c = z - 100;
-    }
+    else if (z >= 3 && z <= 10) { r = 2; c = (z <= 4) ? (z - 2) : (z + 8); }
+    else if (z >= 11 && z <= 18) { r = 3; c = (z <= 12) ? (z - 10) : (z); }
+    else if (z >= 19 && z <= 56) { r = floor((z - 19) / 18) + 4; c = ((z - 19) % 18) + 1; }
+    else if (z >= 57 && z <= 71) { r = 9; c = z - 53; }
+    else if (z >= 72 && z <= 86) { r = 6; c = z - 68; }
+    else if (z >= 87 && z <= 88) { r = 7; c = z - 86; }
+    else if (z >= 89 && z <= 103) { r = 10; c = z - 85; }
+    else if (z >= 104 && z <= 118) { r = 7; c = z - 100; }
     elementCoords[z] = {row: r, col: c};
   }
 }
 
-function drawMenu() {
-  fill(255);
+function drawSquiggle(x, y, pLength, angle, c, freq, amp) {
+  push();
+  translate(x, y);
+  rotate(angle);
+  stroke(c);
+  noFill();
+  strokeWeight(2);
+  beginShape();
+  for (let i = 0; i < pLength; i++) {
+    vertex(i, sin(i * freq) * amp);
+  }
+  endShape();
+  pop();
+}
+
+function drawIonizationPopup() {
+  push();
+  rectMode(CENTER);
+  fill(20, 20, 25, 220);
+  stroke(255, 50, 50);
+  strokeWeight(2);
+  rect(width / 2, height / 2 - 120, 380, 90, 8);
+  
   noStroke();
+  fill(255, 100, 100);
   textAlign(CENTER, CENTER);
-  textSize(32);
+  textSize(22);
+  text("ELECTRON IONIZED!", width / 2, height / 2 - 135);
+  
+  fill(200);
+  textSize(14);
+  text("It absorbed a high-energy photon and escaped.", width / 2, height / 2 - 105);
+  pop();
+}
+
+function drawMenu() {
+  fill(255); noStroke(); textAlign(CENTER, CENTER); textSize(32);
   text("Atom Simulator", width / 2, height / 2 - 40);
-  
-  stroke(100, 150, 255, 150);
-  strokeWeight(3);
-  
-  let cols = 20;
-  let rows = 15;
-  let paddingX = width / cols;
-  let paddingY = height / rows;
-  
+  stroke(100, 150, 255, 150); strokeWeight(3);
+  let cols = 20, rows = 15, paddingX = width / cols, paddingY = height / rows;
   for (let i = 0; i < cols; i++) {
-    for (let j = 0; j < rows; j++) {
-      let x = i * paddingX + paddingX / 2;
-      let y = j * paddingY + paddingY / 2;
-      point(x, y);
-    }
+    for (let j = 0; j < rows; j++) point(i * paddingX + paddingX / 2, j * paddingY + paddingY / 2);
   }
 }
 
 function drawClassical() {
   let Z = protonSlider.value(); 
-  
-  let shellCounts = [];
+  let cx = width / 2;
+  let cy = height / 2 - 30;
+
+  let baseShellCounts = [];
   let remainingElectrons = numElectrons;
   let currentShellIndex = 0;
   
   while (remainingElectrons > 0 && currentShellIndex < shellCapacities.length) {
     let capacity = shellCapacities[currentShellIndex];
     if (remainingElectrons > capacity) {
-      shellCounts.push(capacity);
+      baseShellCounts.push(capacity);
       remainingElectrons -= capacity;
     } else {
-      shellCounts.push(remainingElectrons);
+      baseShellCounts.push(remainingElectrons);
       remainingElectrons = 0;
     }
     currentShellIndex++;
   }
 
-  let netCharge = abs(Z - numElectrons);
-  let instability = map(netCharge, 0, 6, 0, 1, true); 
+  let chargeDifference = Z - (numElectrons + ionizedClassicalCount);
+
+  // --- DRAW UI BOXES ---
+  fill(30, 30, 40, 200); stroke(100, 150, 255, 100); strokeWeight(1);
+  rect(20, 120, 180, 340, 8); 
   
-  if (shellCounts.length > 0 && netCharge === 0) {
-    let lastShellCount = shellCounts[shellCounts.length - 1];
-    let lastShellCap = shellCapacities[shellCounts.length - 1];
-    let isOctet = (lastShellCount === 8 && shellCounts.length > 1); 
-    let isFull = (lastShellCount === lastShellCap); 
-    
-    if (!isFull && !isOctet) {
-      instability = max(instability, 0.15); 
+  fill(255); noStroke(); textAlign(CENTER, TOP); textSize(16);
+  text("Light Sources", 110, 130); 
+  
+  stroke(255, 50); line(30, 380, 190, 380);
+
+  // --- PHOTON LOGIC & EXCITATION ---
+  let currentAtomRadius = visualBaseRadius + ((baseShellCounts.length) * visualRadiusStep);
+  let hitboxRadius = currentAtomRadius * (isIonizationEnabled ? 0.3 : 0.6); 
+
+  // --- DYNAMIC SPAWN RATE LOGIC ---
+  let allLightsOn = activeLights.IR && activeLights.VisLow && activeLights.VisHigh && activeLights.UV;
+  let spawnRate = 24; 
+  if (isIonizationEnabled) {
+    spawnRate = allLightsOn ? 15 : 48; // Faster for white light to prevent waiting forever
+  } else {
+    spawnRate = allLightsOn ? 16 : 24; // Calibrated to be a middle ground (less cluttered than 10)
+  }
+
+  if (isShiningLight && frameCount % spawnRate === 0) { 
+    let availableTypes = [];
+    if (activeLights.IR) availableTypes.push('IR');
+    if (activeLights.VisLow) availableTypes.push('VisLow');
+    if (activeLights.VisHigh) availableTypes.push('VisHigh');
+    if (activeLights.UV) availableTypes.push('UV');
+
+    if (availableTypes.length > 0) {
+      let pType = random(availableTypes); 
+      let pColor, pFreq, pAmp;
+      
+      if (pType === 'IR') { pColor = color(200, 50, 50); pFreq = 0.1; pAmp = 2; } 
+      else if (pType === 'UV') { pColor = color(150); pFreq = 1.0; pAmp = 2; } 
+      else if (pType === 'VisLow') { let rgb = random(visLowColors); pColor = color(rgb[0], rgb[1], rgb[2]); pFreq = random(0.3, 0.4); pAmp = 4; } 
+      else { let rgb = random(visHighColors); pColor = color(rgb[0], rgb[1], rgb[2]); pFreq = random(0.4, 0.6); pAmp = 4; }
+
+      incomingPhotons.push({
+        x: random(cx - currentAtomRadius - 150, cx + currentAtomRadius + 150), y: -50, vx: 0, vy: 6,
+        color: pColor, freq: pFreq, amp: pAmp, type: pType, length: 30
+      });
     }
   }
 
-  fill(255);
-  noStroke();
-  
-  textAlign(CENTER, CENTER);
-  textSize(24);
+  for (let i = incomingPhotons.length - 1; i >= 0; i--) {
+    let p = incomingPhotons[i];
+    p.y += p.vy;
+    drawSquiggle(p.x, p.y, p.length, PI/2, p.color, p.freq, p.amp);
+
+    let d = dist(p.x, p.y, cx, cy);
+    if (d < hitboxRadius && baseShellCounts.length > 0 && p.type !== 'IR') {
+      
+      if (isIonizationEnabled && excitedElectrons.length > 0 && (p.type === 'UV' || p.type === 'VisHigh')) {
+        excitedElectrons.shift();
+        numElectrons--;
+        ionizedClassicalCount++;
+        ionizationMessageTimer = 150; 
+        incomingPhotons.splice(i, 1);
+        continue;
+      }
+
+      let availableShells = [];
+      for (let s = 0; s < baseShellCounts.length; s++) {
+        let currentlyExcitedCount = excitedElectrons.filter(e => e.sourceShell === s).length;
+        if (baseShellCounts[s] - currentlyExcitedCount > 0) {
+          availableShells.push(s);
+        }
+      }
+
+      if (availableShells.length > 0) {
+        let jumpSize = 1;
+        if (p.type === 'VisHigh') jumpSize = 2;
+        else if (p.type === 'UV') jumpSize = 3;
+
+        let sourceShell = random(availableShells);
+        let targetShell = sourceShell + jumpSize; 
+        excitedElectrons.push({ sourceShell: sourceShell, targetShell: targetShell, timer: 60 * jumpSize, photon: p });
+        incomingPhotons.splice(i, 1);
+      }
+    } else if (p.y > height + 50) {
+      incomingPhotons.splice(i, 1);
+    }
+  }
+
+  for (let i = excitedElectrons.length - 1; i >= 0; i--) {
+    excitedElectrons[i].timer--;
+    if (excitedElectrons[i].timer <= 0) {
+      let exc = excitedElectrons[i];
+      let angle = random(TWO_PI);
+      emittedPhotons.push({
+        x: cx, y: cy, vx: cos(angle) * 8, vy: sin(angle) * 8, 
+        color: exc.photon.color, freq: exc.photon.freq, amp: exc.photon.amp, length: 30
+      });
+      excitedElectrons.splice(i, 1);
+    }
+  }
+
+  let visualShellCounts = [...baseShellCounts];
+  for (let exc of excitedElectrons) {
+    visualShellCounts[exc.sourceShell]--;
+    while (visualShellCounts.length <= exc.targetShell) visualShellCounts.push(0);
+    visualShellCounts[exc.targetShell]++;
+  }
+
+  for (let i = emittedPhotons.length - 1; i >= 0; i--) {
+    let p = emittedPhotons[i];
+    p.x += p.vx; p.y += p.vy;
+    drawSquiggle(p.x, p.y, p.length, atan2(p.vy, p.vx), p.color, p.freq, p.amp);
+    if (p.x < -50 || p.x > width + 50 || p.y < -50 || p.y > height + 50) {
+      emittedPhotons.splice(i, 1);
+    }
+  }
+
+  fill(255); noStroke(); textAlign(CENTER, CENTER); textSize(24);
   text("Classical Interpretation (Bohr Model)", width / 2, 40);
   
-  textAlign(LEFT, CENTER);
-  textSize(16);
-  fill(255);
-  text(`Total Electrons: ${numElectrons}`, 20, height - 165); 
+  textAlign(LEFT, CENTER); textSize(16);
+  text(`Total Electrons: ${numElectrons + ionizedClassicalCount}`, 20, height - 215); 
   
-  let chargeDifference = Z - numElectrons;
   let ionText = chargeDifference === 0 ? "Neutral" : (chargeDifference > 0 ? `+${chargeDifference} Ion` : `${abs(chargeDifference)}- Ion`);
-  
-  textAlign(CENTER, CENTER);
-  textSize(16);
-  text(`Protons (Z): ${Z}  [${ionText}]`, width / 2, height - 60);
+  if (ionizedClassicalCount > 0) ionText = `+${chargeDifference + ionizedClassicalCount} Ion (Temporary)`;
+  textAlign(CENTER, CENTER); text(`Protons (Z): ${Z}  [${ionText}]`, width / 2, height - 60);
 
-  textAlign(RIGHT, TOP);
-  textSize(16);
-  fill(100, 255, 100); 
+  textAlign(RIGHT, TOP); textSize(16); fill(100, 255, 100); 
   text("Real-World Bohr Values:", width - 30, 80);
   
-  for (let i = 0; i < shellCounts.length; i++) {
-    let n = i + 1;
-    let realVelocity = 2187 * (Z / n); 
-    let realRadius = 52.9 * ((n * n) / Z); 
-    
-    textSize(13);
-    text(`n=${n} | v: ${realVelocity.toFixed(0)} km/s | r: ${realRadius.toFixed(1)} pm`, width - 30, 80 + n * 22);
+  let textY = 102;
+  for (let i = 0; i < visualShellCounts.length; i++) {
+    if (visualShellCounts[i] > 0) {
+      let n = i + 1;
+      let realVelocity = 2187 * (Z / n); 
+      let realRadius = 52.9 * ((n * n) / Z); 
+      textSize(13);
+      text(`n=${n} | v: ${realVelocity.toFixed(0)} km/s | r: ${realRadius.toFixed(1)} pm`, width - 30, textY);
+      textY += 22;
+    }
   }
 
   drawMiniTable(Z); 
+  drawEnergyScale(baseShellCounts, excitedElectrons); 
   
-  textAlign(RIGHT, BOTTOM);
-  textSize(32);
-  fill(255, 200, 100); 
+  textAlign(RIGHT, BOTTOM); textSize(32); fill(255, 200, 100); 
   text(elements[Z], width - 30, height - 30);
-  
-  textSize(16);
-  fill(200);
-  text(`Atomic Number: ${Z}`, width - 30, height - 70);
+  textSize(16); fill(200); text(`Atomic Number: ${Z}`, width - 30, height - 70);
 
-  let barX = 30;
-  let barY = 140;
-  let barW = 20;
-  let barH = 200;
+  push(); translate(cx, cy); 
+  fill(255, 100, 100); noStroke(); circle(0, 0, map(Z, 1, 118, 10, 40)); 
   
-  textAlign(CENTER, BOTTOM);
-  textSize(14);
-  fill(255);
-  text("Instability", barX + barW / 2, barY - 10);
-  
-  textSize(10);
-  fill(255, 100, 100);
-  text("Extreme", barX + barW / 2, barY - 25);
-  fill(100, 255, 100);
-  text("Stable", barX + barW / 2, barY + barH + 15);
-
-  noFill();
-  stroke(255, 100);
-  strokeWeight(1);
-  rect(barX, barY, barW, barH);
-  
-  let visualInstability = map(instability, 0, 1, 0.05, 1, true); 
-  let fillH = visualInstability * barH;
-  let barColor = lerpColor(color(50, 255, 50), color(255, 50, 50), instability);
-  
-  fill(barColor);
-  noStroke();
-  rect(barX, barY + barH - fillH, barW, fillH);
-
-  push(); 
-  translate(width / 2, height / 2 - 30); 
-  
-  let visualNucleusRadius = map(Z, 1, 118, 10, 40);
-  fill(255, 100, 100);
-  noStroke();
-  circle(0, 0, visualNucleusRadius); 
-  
-  for (let i = 0; i < shellCounts.length; i++) {
+  for (let i = 0; i < visualShellCounts.length; i++) {
     let n = i + 1; 
     let visualR = visualBaseRadius + (i * visualRadiusStep); 
-    let eCount = shellCounts[i]; 
-    
+    let eCount = visualShellCounts[i]; 
     let visualAngularVelocity = (0.05 * Z) / (n * n); 
     
-    noFill();
-    stroke(255, 50);
-    strokeWeight(1);
-    circle(0, 0, visualR * 2);
+    if (shellAngles[i] === undefined) shellAngles[i] = random(TWO_PI);
+
+    noFill(); stroke(255, 50); strokeWeight(1); circle(0, 0, visualR * 2);
     
     for (let j = 0; j < eCount; j++) {
-      let angleOffset = (TWO_PI / eCount) * j;
-      let currentAngle = shellAngles[i] + angleOffset;
-      
-      let x = visualR * cos(currentAngle);
-      let y = visualR * sin(currentAngle);
-      
-      fill(100, 200, 255);
-      noStroke();
-      circle(x, y, 8); 
+      let currentAngle = shellAngles[i] + (TWO_PI / eCount) * j;
+      fill(100, 200, 255); noStroke();
+      circle(visualR * cos(currentAngle), visualR * sin(currentAngle), 8); 
     }
-    
     shellAngles[i] += visualAngularVelocity;
   }
   pop(); 
 }
 
-function drawMiniTable(currentZ) {
-  let tableX = width - 185;
-  let tableY = height - 200; 
-  let standardSize = 8; 
-  let gap = 1; 
-  let highlightExpand = 4; 
+function drawEnergyScale(baseShellCounts, excitedElectrons) {
+  let scaleX = width - 160; 
+  let scaleYBottom = height - 250;
+  let scaleYTop = 220; 
+  let scaleW = 130;
   
-  rectMode(CENTER);
+  fill(255); textAlign(CENTER, BOTTOM); textSize(16);
+  text("Energy Levels (n)", scaleX + scaleW / 2, scaleYTop - 30);
   
-  for (let z = 1; z <= 118; z++) {
-    let pos = elementCoords[z];
-    if (!pos) continue; 
+  const visualSpacing = [0, 0.45, 0.70, 0.85, 0.93, 0.97, 1.0];
+  
+  for (let n = 1; n <= 7; n++) {
+    let y = lerp(scaleYBottom, scaleYTop, visualSpacing[n - 1]);
+    stroke(255, 80); strokeWeight(1); line(scaleX, y, scaleX + scaleW, y);
+    noStroke(); fill(200); textAlign(RIGHT, CENTER); textSize(12); text(`n=${n}`, scaleX - 10, y);
     
-    let drawX = tableX + (pos.col - 1) * (standardSize + gap);
-    let drawY = tableY + (pos.row - 1) * (standardSize + gap);
-    
-    if (z === currentZ) {
-      stroke(255);
-      strokeWeight(1);
-      fill(255, 200, 100); 
-      rect(drawX, drawY, standardSize + highlightExpand, standardSize + highlightExpand, 1);
-    } else {
-      noStroke();
-      fill(100, 150);
-      rect(drawX, drawY, standardSize, standardSize);
+    if (n - 1 < baseShellCounts.length) {
+      let totalGround = baseShellCounts[n - 1];
+      let excited = excitedElectrons.filter(e => e.sourceShell === n - 1).length;
+      let currentGround = totalGround - excited;
+      
+      fill(100, 200, 255);
+      for (let e = 0; e < currentGround; e++) {
+        let ex = scaleX + 10 + (e * 8);
+        if (ex < scaleX + scaleW - 20) circle(ex, y, 6);
+      }
     }
   }
   
+  for (let exc of excitedElectrons) {
+    let nTarget = exc.targetShell + 1;
+    let nIndex = min(nTarget - 1, 6);
+    let y = lerp(scaleYBottom, scaleYTop, visualSpacing[nIndex]);
+    fill(exc.photon.color); stroke(255); strokeWeight(1);
+    circle(scaleX + scaleW - 20 - random(15), y, 6); 
+  }
+}
+
+function drawMiniTable(currentZ) {
+  let tableX = width - 150, tableY = height - 165; 
+  let standardSize = 6, gap = 1, highlightExpand = 3; 
+  rectMode(CENTER);
+  for (let z = 1; z <= 118; z++) {
+    let pos = elementCoords[z];
+    if (!pos) continue; 
+    let drawX = tableX + (pos.col - 1) * (standardSize + gap);
+    let drawY = tableY + (pos.row - 1) * (standardSize + gap);
+    if (z === currentZ) {
+      stroke(255); strokeWeight(1); fill(255, 200, 100); 
+      rect(drawX, drawY, standardSize + highlightExpand, standardSize + highlightExpand, 1);
+    } else {
+      noStroke(); fill(100, 150); rect(drawX, drawY, standardSize, standardSize);
+    }
+  }
   rectMode(CORNER); 
 }
 
 function drawQuantum() {
-  fill(255);
-  noStroke();
-  textAlign(CENTER, CENTER);
-  textSize(24);
-  text("Quantum Interpretation (Schrödinger Model)", width / 2, 40);
+  if (quantumDecayTimer <= 0 && !quantumIsIonized) {
+    quantumN = quantumNSlider.value();
+  } else {
+    quantumNSlider.value(quantumN); 
+  }
+
+  let cx = width / 2;
+  let cy = height / 2 - 30;
   
-  textSize(16);
-  fill(150);
-  text("Blank canvas ready for probability clouds...", width / 2, height / 2);
+  fill(30, 30, 40, 200); stroke(100, 150, 255, 100); strokeWeight(1);
+  rect(20, 120, 180, 340, 8); 
+  
+  fill(255); noStroke(); textAlign(CENTER, TOP); textSize(16);
+  text("Light Sources", 110, 130); 
+  
+  stroke(255, 50); line(30, 380, 190, 380);
+
+  let baseRadius = 80 + (quantumN * 15);
+  let hitboxRadius = baseRadius * (isIonizationEnabled ? 0.4 : 0.8); 
+
+  // --- DYNAMIC SPAWN RATE LOGIC ---
+  let allLightsOn = activeLights.IR && activeLights.VisLow && activeLights.VisHigh && activeLights.UV;
+  let spawnRate = 24; 
+  if (isIonizationEnabled) {
+    spawnRate = allLightsOn ? 15 : 48;
+  } else {
+    spawnRate = allLightsOn ? 16 : 24; // Calibrated to be a middle ground (less cluttered than 10)
+  }
+
+  if (isShiningLight && frameCount % spawnRate === 0) { 
+    let availableTypes = [];
+    if (activeLights.IR) availableTypes.push('IR');
+    if (activeLights.VisLow) availableTypes.push('VisLow');
+    if (activeLights.VisHigh) availableTypes.push('VisHigh');
+    if (activeLights.UV) availableTypes.push('UV');
+
+    if (availableTypes.length > 0) {
+      let pType = random(availableTypes); 
+      let pColor, pFreq, pAmp;
+      
+      if (pType === 'IR') { pColor = color(200, 50, 50); pFreq = 0.1; pAmp = 2; } 
+      else if (pType === 'UV') { pColor = color(150); pFreq = 1.0; pAmp = 2; } 
+      else if (pType === 'VisLow') { let rgb = random(visLowColors); pColor = color(rgb[0], rgb[1], rgb[2]); pFreq = random(0.3, 0.4); pAmp = 4; } 
+      else { let rgb = random(visHighColors); pColor = color(rgb[0], rgb[1], rgb[2]); pFreq = random(0.4, 0.6); pAmp = 4; }
+
+      incomingPhotons.push({
+        x: random(cx - baseRadius - 150, cx + baseRadius + 150), y: -50, vx: 0, vy: 6,
+        color: pColor, freq: pFreq, amp: pAmp, type: pType, length: 30
+      });
+    }
+  }
+
+  for (let i = incomingPhotons.length - 1; i >= 0; i--) {
+    let p = incomingPhotons[i];
+    p.y += p.vy;
+    drawSquiggle(p.x, p.y, p.length, PI/2, p.color, p.freq, p.amp);
+
+    let d = dist(p.x, p.y, cx, cy);
+    
+    if (d < hitboxRadius && p.type !== 'IR' && !quantumIsIonized) {
+      
+      if (isIonizationEnabled && quantumDecayTimer > 0 && (p.type === 'UV' || p.type === 'VisHigh')) {
+        quantumIsIonized = true;
+        quantumDecayTimer = 0;
+        quantumN = 1;
+        quantumNSlider.value(1);
+        ionizationMessageTimer = 150; 
+        incomingPhotons.splice(i, 1);
+        continue;
+      }
+
+      if (quantumDecayTimer <= 0) {
+        let jumpSize = 1;
+        if (p.type === 'VisHigh') jumpSize = 2;
+        else if (p.type === 'UV') jumpSize = 3;
+
+        if (quantumN + jumpSize <= 10) { 
+          quantumN += jumpSize;
+          quantumDecayTimer = 60 * jumpSize;
+          quantumAbsorbedPhoton = p;
+          quantumNSlider.value(quantumN); 
+          incomingPhotons.splice(i, 1);
+        }
+      }
+    } else if (p.y > height + 50) {
+      incomingPhotons.splice(i, 1);
+    }
+  }
+
+  if (quantumDecayTimer > 0 && !quantumIsIonized) {
+    quantumDecayTimer--;
+    if (quantumDecayTimer <= 0 && quantumAbsorbedPhoton) {
+      let angle = random(TWO_PI);
+      emittedPhotons.push({
+        x: cx, y: cy, vx: cos(angle) * 8, vy: sin(angle) * 8, 
+        color: quantumAbsorbedPhoton.color, freq: quantumAbsorbedPhoton.freq, amp: quantumAbsorbedPhoton.amp, length: 30
+      });
+      quantumN = 1; 
+      quantumNSlider.value(1);
+      quantumAbsorbedPhoton = null;
+    }
+  }
+
+  for (let i = emittedPhotons.length - 1; i >= 0; i--) {
+    let p = emittedPhotons[i];
+    p.x += p.vx; p.y += p.vy;
+    drawSquiggle(p.x, p.y, p.length, atan2(p.vy, p.vx), p.color, p.freq, p.amp);
+    if (p.x < -50 || p.x > width + 50 || p.y < -50 || p.y > height + 50) {
+      emittedPhotons.splice(i, 1);
+    }
+  }
+
+  fill(255); noStroke(); textAlign(CENTER, CENTER); textSize(24);
+  text("Early Quantum Interpretation (De Broglie Matter Waves)", width / 2, 40);
+  
+  if (quantumIsIonized) {
+    textSize(16); fill(255, 100, 100); text(`Energy Level (n): ∞ (Ionized)`, width / 2, height - 70);
+  } else {
+    textSize(16); fill(200); text(`Energy Level (n): ${quantumN}`, width / 2, height - 70);
+    textSize(14); fill(150);
+    text(`The electron's standing wave perfectly fits ${quantumN} full wavelength${quantumN > 1 ? 's' : ''} around the orbit.`, width / 2, height - 100);
+  }
+
+  let realVelocity = 2187 / quantumN; 
+  let realRadius = 52.9 * (quantumN * quantumN); 
+  let energyEV = -13.6 / (quantumN * quantumN); 
+  
+  textAlign(RIGHT, TOP); textSize(16); fill(100, 255, 100); 
+  text("Real-World Hydrogen Values:", width - 30, 80);
+  textSize(13);
+  
+  if (quantumIsIonized) {
+    text(`n=∞ | v: Escaped | r: Escaped`, width - 30, 102);
+    text(`E > 0.000 eV`, width - 30, 124);
+  } else {
+    text(`n=${quantumN} | v: ${realVelocity.toFixed(0)} km/s | r: ${realRadius.toFixed(1)} pm`, width - 30, 102);
+    text(`E = ${energyEV.toFixed(3)} eV`, width - 30, 124);
+  }
+
+  let qBaseShells = [0, 0, 0, 0, 0, 0, 0];
+  let qExcited = [];
+  if (!quantumIsIonized) {
+    if (quantumDecayTimer > 0 && quantumAbsorbedPhoton) {
+      qBaseShells[0] = 1; 
+      qExcited.push({ sourceShell: 0, targetShell: quantumN - 1, photon: quantumAbsorbedPhoton });
+    } else {
+      if (quantumN <= 7) qBaseShells[quantumN - 1] = 1;
+    }
+  }
+  drawEnergyScale(qBaseShells, qExcited);
+
+  push(); translate(cx, cy);
+  fill(255, 100, 100); noStroke(); circle(0, 0, 20); 
+  
+  if (!quantumIsIonized) {
+    noFill(); stroke(255, 50); strokeWeight(1);
+    drawingContext.setLineDash([5, 5]); circle(0, 0, baseRadius * 2);
+    drawingContext.setLineDash([]); 
+    
+    stroke(100, 200, 255); strokeWeight(3); noFill();
+    beginShape();
+    for (let a = 0; a <= TWO_PI + 0.1; a += 0.05) {
+      let amplitude = 15 + (quantumN * 2); 
+      let vibration = sin(frameCount * 0.1); 
+      let r = baseRadius + (amplitude * sin(quantumN * a) * vibration);
+      vertex(r * cos(a), r * sin(a));
+    }
+    endShape(CLOSE);
+  }
+  pop();
 }
     </script>
   </body>
