@@ -79,21 +79,28 @@ const shellCapacities = [2, 8, 18, 32, 50, 72];
 let shellAngles = [0, 0, 0, 0, 0, 0]; 
 
 function setup() {
-  createCanvas(windowWidth, windowHeight);
+  // CRITICAL FIX: Lock canvas to absolute top-left and kill browser margins
+  let cnv = createCanvas(windowWidth, windowHeight);
+  cnv.position(0, 0);
+  document.body.style.margin = '0';
+  document.body.style.padding = '0';
+  document.body.style.overflow = 'hidden';
+
   populateElementCoords(); 
 
   // Navigation Buttons
   btnClassical = createButton('Classical Interpretation');
-  btnClassical.size(150, 40);
+  btnClassical.size(160, 40);
   btnClassical.style('border-radius', '6px'); 
   btnClassical.mousePressed(() => switchPage('classical'));
   
   btnQuantum = createButton('Quantum Interpretation');
-  btnQuantum.size(150, 40);
+  btnQuantum.size(160, 40);
   btnQuantum.style('border-radius', '6px'); 
   btnQuantum.mousePressed(() => switchPage('quantum'));
   
   btnBack = createButton('Back to Grid');
+  btnBack.size(180, 30);
   btnBack.style('border-radius', '6px'); 
   btnBack.mousePressed(() => switchPage('menu'));
   btnBack.hide(); 
@@ -173,6 +180,16 @@ function setup() {
   });
   btnLightWhite.hide();
 
+  // Ionization Toggle
+  btnToggleIonization = createButton('Ionization: OFF');
+  btnToggleIonization.size(150, 30);
+  btnToggleIonization.style('border-radius', '6px');
+  btnToggleIonization.mousePressed(() => {
+    isIonizationEnabled = !isIonizationEnabled;
+    syncLightButtons();
+  });
+  btnToggleIonization.hide();
+
   // Master switch
   btnShineLight = createButton('▶ Shine Light');
   btnShineLight.size(150, 40);
@@ -185,17 +202,10 @@ function setup() {
   });
   btnShineLight.hide();
 
-  // Ionization Toggle
-  btnToggleIonization = createButton('Ionization: OFF');
-  btnToggleIonization.size(150, 30);
-  btnToggleIonization.style('border-radius', '6px');
-  btnToggleIonization.mousePressed(() => {
-    isIonizationEnabled = !isIonizationEnabled;
-    syncLightButtons();
-  });
-  btnToggleIonization.hide();
+  // Force strict sizing to prevent browser discrepancies
+  let allBtns = [btnClassical, btnQuantum, btnBack, btnAddElectron, btnSubElectron, btnResetElectron, btnLightIR, btnLightVisLow, btnLightVisHigh, btnLightUV, btnLightWhite, btnShineLight, btnToggleIonization];
+  allBtns.forEach(b => b.style('box-sizing', 'border-box'));
 
-  // Initialize styles
   syncLightButtons();
 
   // --- Quantum UI ---
@@ -246,27 +256,35 @@ function windowResized() {
 }
 
 function updateUIPositions() {
-  btnClassical.position(width / 2 - 180, height / 2 + 40);
-  btnQuantum.position(width / 2 + 30, height / 2 + 40);
+  // Navigation
+  btnClassical.position(width / 2 - 170, height / 2 + 40);
+  btnQuantum.position(width / 2 + 10, height / 2 + 40);
   btnBack.position(20, 20);
   
+  // Bottom Sliders
   protonSlider.position(width / 2 - 200, height - 40);
-  
-  btnLightIR.position(35, 160);
-  btnLightVisLow.position(35, 200);
-  btnLightVisHigh.position(35, 240);
-  btnLightUV.position(35, 280);
-  btnLightWhite.position(35, 330);
-  
-  btnShineLight.position(35, 400);
-
-  btnAddElectron.position(20, height - 190);
-  btnSubElectron.position(20, height - 150);
-  btnResetElectron.position(20, height - 110);
-  
-  btnToggleIonization.position(20, height - 60);
-
   quantumNSlider.position(width / 2 - 200, height - 40);
+
+  // --- LEFT UI COLUMN ---
+  // The panel goes from x=20 to x=200. Math center is x=110.
+  // Button width = 150. (110 - 75) = x=35 exact center.
+  
+  // Space out the Y coordinates aggressively to prevent overlap
+  let lightY = 135;
+  btnLightIR.position(35, lightY);
+  btnLightVisLow.position(35, lightY + 40);
+  btnLightVisHigh.position(35, lightY + 80);
+  btnLightUV.position(35, lightY + 120);
+  btnLightWhite.position(35, lightY + 160);
+  
+  btnToggleIonization.position(35, lightY + 210);
+  btnShineLight.position(35, lightY + 260); // Much more room above it
+
+  // Electron Panel Controls 
+  let electronY = 520;
+  btnAddElectron.position(35, electronY);
+  btnSubElectron.position(35, electronY + 40);
+  btnResetElectron.position(35, electronY + 80);
 }
 
 function syncLightButtons() {
@@ -425,26 +443,33 @@ function drawClassical() {
   let chargeDifference = Z - (numElectrons + ionizedClassicalCount);
 
   // --- DRAW UI BOXES ---
+  // Main Light Sources Box (Expanded height to fit spread-out buttons)
   fill(30, 30, 40, 200); stroke(100, 150, 255, 100); strokeWeight(1);
-  rect(20, 120, 180, 340, 8); 
+  rect(20, 100, 180, 350, 8); 
   
   fill(255); noStroke(); textAlign(CENTER, TOP); textSize(16);
-  text("Light Sources", 110, 130); 
+  text("Light Sources", 110, 110); 
   
-  stroke(255, 50); line(30, 380, 190, 380);
+  stroke(255, 50); 
+  line(30, 335, 190, 335); // Lowered divider line
+  line(30, 385, 190, 385); // Lowered divider line
+
+  // Electron Controls Box (Pushed down further to ensure no overlap)
+  fill(30, 30, 40, 200); stroke(100, 150, 255, 100); strokeWeight(1);
+  rect(20, 470, 180, 175, 8); 
+  
+  fill(255); noStroke(); textAlign(CENTER, TOP); textSize(16);
+  text("Electron Controls", 110, 480); 
+  
+  textSize(14);
+  text(`Total Electrons: ${numElectrons + ionizedClassicalCount}`, 110, 500);
 
   // --- PHOTON LOGIC & EXCITATION ---
   let currentAtomRadius = visualBaseRadius + ((baseShellCounts.length) * visualRadiusStep);
   let hitboxRadius = currentAtomRadius * (isIonizationEnabled ? 0.3 : 0.6); 
 
-  // --- DYNAMIC SPAWN RATE LOGIC ---
   let allLightsOn = activeLights.IR && activeLights.VisLow && activeLights.VisHigh && activeLights.UV;
-  let spawnRate = 24; 
-  if (isIonizationEnabled) {
-    spawnRate = allLightsOn ? 15 : 48; // Faster for white light to prevent waiting forever
-  } else {
-    spawnRate = allLightsOn ? 16 : 24; // Calibrated to be a middle ground (less cluttered than 10)
-  }
+  let spawnRate = isIonizationEnabled ? (allLightsOn ? 15 : 48) : (allLightsOn ? 16 : 24);
 
   if (isShiningLight && frameCount % spawnRate === 0) { 
     let availableTypes = [];
@@ -541,12 +566,9 @@ function drawClassical() {
   fill(255); noStroke(); textAlign(CENTER, CENTER); textSize(24);
   text("Classical Interpretation (Bohr Model)", width / 2, 40);
   
-  textAlign(LEFT, CENTER); textSize(16);
-  text(`Total Electrons: ${numElectrons + ionizedClassicalCount}`, 20, height - 215); 
-  
   let ionText = chargeDifference === 0 ? "Neutral" : (chargeDifference > 0 ? `+${chargeDifference} Ion` : `${abs(chargeDifference)}- Ion`);
   if (ionizedClassicalCount > 0) ionText = `+${chargeDifference + ionizedClassicalCount} Ion (Temporary)`;
-  textAlign(CENTER, CENTER); text(`Protons (Z): ${Z}  [${ionText}]`, width / 2, height - 60);
+  textAlign(CENTER, CENTER); textSize(16); text(`Protons (Z): ${Z}  [${ionText}]`, width / 2, height - 60);
 
   textAlign(RIGHT, TOP); textSize(16); fill(100, 255, 100); 
   text("Real-World Bohr Values:", width - 30, 80);
@@ -660,25 +682,22 @@ function drawQuantum() {
   let cx = width / 2;
   let cy = height / 2 - 30;
   
+  // --- DRAW UI BOXES ---
   fill(30, 30, 40, 200); stroke(100, 150, 255, 100); strokeWeight(1);
-  rect(20, 120, 180, 340, 8); 
+  rect(20, 100, 180, 350, 8); 
   
   fill(255); noStroke(); textAlign(CENTER, TOP); textSize(16);
-  text("Light Sources", 110, 130); 
+  text("Light Sources", 110, 110); 
   
-  stroke(255, 50); line(30, 380, 190, 380);
+  stroke(255, 50); 
+  line(30, 335, 190, 335);
+  line(30, 385, 190, 385);
 
   let baseRadius = 80 + (quantumN * 15);
   let hitboxRadius = baseRadius * (isIonizationEnabled ? 0.4 : 0.8); 
 
-  // --- DYNAMIC SPAWN RATE LOGIC ---
   let allLightsOn = activeLights.IR && activeLights.VisLow && activeLights.VisHigh && activeLights.UV;
-  let spawnRate = 24; 
-  if (isIonizationEnabled) {
-    spawnRate = allLightsOn ? 15 : 48;
-  } else {
-    spawnRate = allLightsOn ? 16 : 24; // Calibrated to be a middle ground (less cluttered than 10)
-  }
+  let spawnRate = isIonizationEnabled ? (allLightsOn ? 15 : 48) : (allLightsOn ? 16 : 24); 
 
   if (isShiningLight && frameCount % spawnRate === 0) { 
     let availableTypes = [];
