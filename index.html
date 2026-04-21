@@ -35,6 +35,7 @@ let excitedElectrons = [];
 
 // Quantum State
 let quantumN = 1;
+let quantumBaseN = 1; // Tracks the user-set base state
 let quantumDecayTimer = 0;
 let quantumAbsorbedPhoton = null;
 
@@ -266,10 +267,6 @@ function updateUIPositions() {
   quantumNSlider.position(width / 2 - 200, height - 40);
 
   // --- LEFT UI COLUMN ---
-  // The panel goes from x=20 to x=200. Math center is x=110.
-  // Button width = 150. (110 - 75) = x=35 exact center.
-  
-  // Space out the Y coordinates aggressively to prevent overlap
   let lightY = 135;
   btnLightIR.position(35, lightY);
   btnLightVisLow.position(35, lightY + 40);
@@ -278,7 +275,7 @@ function updateUIPositions() {
   btnLightWhite.position(35, lightY + 160);
   
   btnToggleIonization.position(35, lightY + 210);
-  btnShineLight.position(35, lightY + 260); // Much more room above it
+  btnShineLight.position(35, lightY + 260);
 
   // Electron Panel Controls 
   let electronY = 520;
@@ -443,7 +440,6 @@ function drawClassical() {
   let chargeDifference = Z - (numElectrons + ionizedClassicalCount);
 
   // --- DRAW UI BOXES ---
-  // Main Light Sources Box (Expanded height to fit spread-out buttons)
   fill(30, 30, 40, 200); stroke(100, 150, 255, 100); strokeWeight(1);
   rect(20, 100, 180, 350, 8); 
   
@@ -451,10 +447,9 @@ function drawClassical() {
   text("Light Sources", 110, 110); 
   
   stroke(255, 50); 
-  line(30, 335, 190, 335); // Lowered divider line
-  line(30, 385, 190, 385); // Lowered divider line
+  line(30, 335, 190, 335); 
+  line(30, 385, 190, 385); 
 
-  // Electron Controls Box (Pushed down further to ensure no overlap)
   fill(30, 30, 40, 200); stroke(100, 150, 255, 100); strokeWeight(1);
   rect(20, 470, 180, 175, 8); 
   
@@ -675,6 +670,7 @@ function drawMiniTable(currentZ) {
 function drawQuantum() {
   if (quantumDecayTimer <= 0 && !quantumIsIonized) {
     quantumN = quantumNSlider.value();
+    quantumBaseN = quantumN; // Track the resting state
   } else {
     quantumNSlider.value(quantumN); 
   }
@@ -735,6 +731,7 @@ function drawQuantum() {
         quantumIsIonized = true;
         quantumDecayTimer = 0;
         quantumN = 1;
+        quantumBaseN = 1;
         quantumNSlider.value(1);
         ionizationMessageTimer = 150; 
         incomingPhotons.splice(i, 1);
@@ -767,8 +764,8 @@ function drawQuantum() {
         x: cx, y: cy, vx: cos(angle) * 8, vy: sin(angle) * 8, 
         color: quantumAbsorbedPhoton.color, freq: quantumAbsorbedPhoton.freq, amp: quantumAbsorbedPhoton.amp, length: 30
       });
-      quantumN = 1; 
-      quantumNSlider.value(1);
+      quantumN = quantumBaseN; // Return to user's set resting state
+      quantumNSlider.value(quantumBaseN); // Restore slider visually
       quantumAbsorbedPhoton = null;
     }
   }
@@ -809,12 +806,14 @@ function drawQuantum() {
     text(`E = ${energyEV.toFixed(3)} eV`, width - 30, 124);
   }
 
+  // Draw Dynamic Energy Scale for Quantum View
   let qBaseShells = [0, 0, 0, 0, 0, 0, 0];
   let qExcited = [];
   if (!quantumIsIonized) {
     if (quantumDecayTimer > 0 && quantumAbsorbedPhoton) {
-      qBaseShells[0] = 1; 
-      qExcited.push({ sourceShell: 0, targetShell: quantumN - 1, photon: quantumAbsorbedPhoton });
+      // Draw from the dynamic base instead of hardcoded 0
+      if (quantumBaseN <= 7) qBaseShells[quantumBaseN - 1] = 1; 
+      qExcited.push({ sourceShell: quantumBaseN - 1, targetShell: quantumN - 1, photon: quantumAbsorbedPhoton });
     } else {
       if (quantumN <= 7) qBaseShells[quantumN - 1] = 1;
     }
