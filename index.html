@@ -463,8 +463,8 @@ function drawClassical() {
   let currentAtomRadius = visualBaseRadius + ((baseShellCounts.length) * visualRadiusStep);
   let hitboxRadius = currentAtomRadius * (isIonizationEnabled ? 0.3 : 0.6); 
 
-  let allLightsOn = activeLights.IR && activeLights.VisLow && activeLights.VisHigh && activeLights.UV;
-  let spawnRate = isIonizationEnabled ? (allLightsOn ? 15 : 48) : (allLightsOn ? 16 : 24);
+  // CHANGED: Fixed fast spawn rate regardless of how many lights are active
+  let spawnRate = isIonizationEnabled ? 15 : 16;
 
   if (isShiningLight && frameCount % spawnRate === 0) { 
     let availableTypes = [];
@@ -692,8 +692,8 @@ function drawQuantum() {
   let baseRadius = 80 + (quantumN * 15);
   let hitboxRadius = baseRadius * (isIonizationEnabled ? 0.4 : 0.8); 
 
-  let allLightsOn = activeLights.IR && activeLights.VisLow && activeLights.VisHigh && activeLights.UV;
-  let spawnRate = isIonizationEnabled ? (allLightsOn ? 15 : 48) : (allLightsOn ? 16 : 24); 
+  // CHANGED: Fixed fast spawn rate regardless of how many lights are active
+  let spawnRate = isIonizationEnabled ? 15 : 16; 
 
   if (isShiningLight && frameCount % spawnRate === 0) { 
     let availableTypes = [];
@@ -764,8 +764,8 @@ function drawQuantum() {
         x: cx, y: cy, vx: cos(angle) * 8, vy: sin(angle) * 8, 
         color: quantumAbsorbedPhoton.color, freq: quantumAbsorbedPhoton.freq, amp: quantumAbsorbedPhoton.amp, length: 30
       });
-      quantumN = quantumBaseN; // Return to user's set resting state
-      quantumNSlider.value(quantumBaseN); // Restore slider visually
+      quantumN = quantumBaseN; 
+      quantumNSlider.value(quantumBaseN); 
       quantumAbsorbedPhoton = null;
     }
   }
@@ -811,7 +811,6 @@ function drawQuantum() {
   let qExcited = [];
   if (!quantumIsIonized) {
     if (quantumDecayTimer > 0 && quantumAbsorbedPhoton) {
-      // Draw from the dynamic base instead of hardcoded 0
       if (quantumBaseN <= 7) qBaseShells[quantumBaseN - 1] = 1; 
       qExcited.push({ sourceShell: quantumBaseN - 1, targetShell: quantumN - 1, photon: quantumAbsorbedPhoton });
     } else {
